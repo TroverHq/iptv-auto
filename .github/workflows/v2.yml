@@ -1,0 +1,13 @@
+name: base
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hello:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hello

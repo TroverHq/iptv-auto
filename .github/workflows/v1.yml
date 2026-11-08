@@ -1,0 +1,13 @@
+name: base
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 13 * * *"
+    - cron: "30 1 * * *"
+
+jobs:
+  hello:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hello

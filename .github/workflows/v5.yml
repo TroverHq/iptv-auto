@@ -1,0 +1,11 @@
+name: base
+
+on:
+  workflow_dispatch:
+
+jobs:
+  hello:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - run: echo hello

@@ -4,7 +4,8 @@ name: iptv-auto-update
 on:
   workflow_dispatch:
   schedule:
-    - cron: "30 13,1 * * *"
+    - cron: "30 13 * * *"
+    - cron: "30 1 * * *"
 
 permissions:
   contents: read

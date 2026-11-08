@@ -1,0 +1,90 @@
+name: iptv-auto-update
+
+# 姣忓ぉ涓ゆ锛歎TC 13:30 / 01:30 = 鍖椾含鏃堕棿 21:30 / 09:30
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 13 * * *"
+    - cron: "30 1 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iptv-update
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: 鍚姩 akiralereal/iptv 瀹瑰櫒
+        run: |
+          docker run -d --name iptv \
+            -p 1905:1905 \
+            -e mport=1905 \
+            -e mbrowserConcurrency=1 \
+            -e TZ=Asia/Shanghai \
+            -v "$HOME/iptv-data:/iptv/data" \
+            akiralereal/iptv:latest
+          for i in $(seq 1 60); do
+            if curl -sf -m 5 http://127.0.0.1:1905/ -o /dev/null; then
+              echo "web ok"
+              break
+            fi
+            sleep 5
+          done
+
+      - name: 绛夊緟鑱氬悎瀹屾垚骞舵姄鍙栬緭鍑?        run: |
+          mkdir -p out
+          ok=0
+          # 鏈€澶氱瓑 75 鍒嗛挓锛?0*90s锛夛紝鏈熼棿姣?90s 鎺竴娆?/txt 鏄惁宸蹭骇鍑?#genre# 鍒楄〃
+          for i in $(seq 1 50); do
+            body=$(curl -s -m 30 http://127.0.0.1:1905/txt || true)
+            if [ -n "$body" ] && echo "$body" | grep -q "#genre#"; then
+              echo "$body" > out/iptv.json
+              ok=1
+              echo "READY at iter $i"
+              break
+            fi
+            sleep 90
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::error::瀹瑰櫒 75 鍒嗛挓鍐呮湭浜у嚭棰戦亾鍒楄〃"
+            curl -s -m 30 http://127.0.0.1:1905/admin -o out/admin_dump.html || true
+            exit 1
+          fi
+          curl -s -m 60 http://127.0.0.1:1905/interface.m3u -o out/iptv_auto.m3u || true
+          curl -s -m 60 http://127.0.0.1:1905/playback.xml -o out/epg.xml || true
+          wc -c out/*
+          echo "===== TXT 鍓?40 琛岋紙鍒嗙粍棰勮锛?====="
+          head -40 out/iptv.json
+
+      # 棣栬窇/鎺掓煡鐢細鍦?Actions 杩愯椤典笅杞戒骇鐗╋紝浜哄伐纭鍐呭璐ㄩ噺
+      - name: 涓婁紶浜х墿锛圓ctions 椤靛彲涓嬭浇锛?        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iptv-output
+          path: out/
+          retention-days: 14
+
+      - name: 鎺ㄩ€佸埌 Gitee锛堟柊寤烘枃浠讹紝涓嶈鐩?channels.json锛?        env:
+          GITEE_USER: ${{ secrets.GITEE_USER }}
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_REPO: ${{ secrets.GITEE_REPO }}
+        run: |
+          git config --global user.name "iptv-auto"
+          git config --global user.email "iptv-auto@actions.local"
+          git clone "https://${GITEE_USER}:${GITEE_TOKEN}@gitee.com/${GITEE_REPO}.git" repo
+          cd repo
+          cp ../out/iptv.json ./iptv.json
+          # 闇€瑕佺殑璇濅竴骞剁淮鎶わ紙鍏堜繚鎸佹渶灏忔敼鍔紝娉ㄩ噴鎺夛級锛?          # cp ../out/iptv_auto.m3u ./iptv_auto.m3u
+          # cp ../out/epg.xml ./epg.xml
+          if git diff --quiet -- iptv.json; then
+            echo "鍐呭鏃犲彉鍖栵紝璺宠繃鎻愪氦"
+          else
+            git add iptv.json
+            git commit -m "auto: iptv list update $(date -u '+%F %T')"
+            git push "https://${GITEE_USER}:${GITEE_TOKEN}@gitee.com/${GITEE_REPO}.git" HEAD
+          fi

@@ -71,6 +71,55 @@ jobs:
           path: out/
           retention-days: 14
 
+      - name: 整理（剔除本机代理地址 + 统一分类）
+        run: |
+          python3 - <<'PYEOF'
+          import sys
+          src = "out/iptv.json"
+          lines = open(src, encoding="utf-8", errors="replace").read().splitlines()
+          ORDER = ["央视","卫视","体育","影视国际","少儿教育","文旅景观","地方台","其他"]
+          MAP = {
+            "央视":"央视","央视频":"央视","央视景观":"央视","iPanda":"央视",
+            "卫视":"卫视","体育":"体育",
+            "影视":"影视国际","国际":"影视国际","韩国":"影视国际","日本":"影视国际",
+            "新加坡":"影视国际","香港":"影视国际","澳门":"影视国际","台湾":"影视国际",
+            "少儿":"少儿教育","教育":"少儿教育","宠物":"少儿教育",
+            "文旅":"文旅景观",
+          }
+          PROV = set("""江苏 安徽 四川 辽宁 甘肃 广东 贵州 广西 福建 吉林 江西
+            黑龙江 海南 河南 浙江 山东 内蒙古 山西 陕西 天津 青海 宁夏 新疆 西藏
+            云南 上海 湖南 台湾""".split())
+          def bucket(g):
+              g = g.strip()
+              if g in MAP: return MAP[g]
+              if g.endswith("景观") or g.endswith("风景"): return "文旅景观"
+              if g in PROV: return "地方台"
+              return "其他"
+          cats = {k: [] for k in ORDER}; cats["其他"] = []
+          cur = "其他"; kept = 0; dropped = 0
+          for ln in lines:
+              ln = ln.strip()
+              if not ln: continue
+              if ln.endswith("#genre#"):
+                  cur = bucket(ln.replace("#genre#",""))
+                  continue
+              if (ln.startswith("http://") or ln.startswith("https://")) and "," in ln:
+                  if "://127.0.0.1" in ln:
+                      dropped += 1; continue
+                  name, url = ln.split(",", 1)
+                  cats[cur].append(name.strip() + "," + url.strip())
+                  kept += 1
+          if kept == 0:
+              print("::error::整理后无任何直连频道，中止推送"); sys.exit(1)
+          out = []
+          for c in ORDER:
+              if not cats[c]: continue
+              out.append(c + ",#genre#")
+              out.extend(cats[c])
+          open(src, "w", encoding="utf-8").write("\n".join(out) + "\n")
+          used = [c for c in ORDER if cats[c]]
+          print("kept=%d dropped=%d 分类=%s 各类条数=%s" % (kept, dropped, "/".join(used), [len(cats[c]) for c in used]))
+
       - name: 推送到 Gitee（新建文件，不覆盖 channels.json）
         env:
           GITEE_USER: ${{ secrets.GITEE_USER }}

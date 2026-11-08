@@ -19,6 +19,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
+      # C2: 拉取仓库代码（scripts/clean_iptv.py 在 repo 里，runner 工作区不 checkout 看不到）
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: 启动 akiralereal/iptv 容器
         run: |
           docker run -d --name iptv \

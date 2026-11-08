@@ -2,7 +2,7 @@ name: iptv-auto-update
 
 # 姣忓ぉ涓ゆ锛歎TC 13:30 / 01:30 = 鍖椾含鏃堕棿 21:30 / 09:30
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
   schedule:
     - cron: "30 13,1 * * *"
 
